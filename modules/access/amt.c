@@ -397,7 +397,8 @@ static int Open( vlc_object_t *p_this )
     sys->vlc_obj = p_this;
 
     /* The standard MPEG-2 transport is 188 bytes.  7 packets fit into a standard 1500 byte Ethernet frame */
-    sys->mtu = 7 * 188;
+    // sys->mtu = 7 * 188;
+    sys->mtu = 1500; // for fragmentation case
 
     p_access->p_sys = sys;
 
@@ -686,7 +687,8 @@ static int Control( stream_t *p_access, int i_query, va_list args )
 static block_t *BlockAMT(stream_t *p_access, bool *restrict eof)
 {
     access_sys_t *sys = p_access->p_sys;
-    ssize_t len = 0, shift = 0, tunnel = sys->is_ipv4 ? IP_HDR_LEN + UDP_HDR_LEN + AMT_HDR_LEN : IPv6_FIXED_HDR_LEN + UDP_HDR_LEN + AMT_HDR_LEN;
+    ssize_t len = 0, shift = 0;
+    int tunnel = UDP_HDR_LEN + AMT_HDR_LEN + (sys->is_ipv4 ? IP_HDR_LEN : IPv6_FIXED_HDR_LEN );
 
     /* Allocate anticipated MTU buffer for holding the UDP packet suitable for native or AMT tunneled multicast */
     block_t *pkt = block_Alloc( sys->mtu + tunnel );
@@ -723,42 +725,113 @@ static block_t *BlockAMT(stream_t *p_access, bool *restrict eof)
     /* If using AMT tunneling perform basic checks and point to beginning of the payload */
     if( sys->tryAMT )
     {
+
         /* AMT is a wrapper for UDP streams, so recv is used. */
         len = recv( sys->sAMT, pkt->p_buffer, sys->mtu + tunnel, 0 );
 
         /* Check for the integrity of the received AMT packet */
-        if( len < 0 || *(pkt->p_buffer) != AMT_MULT_DATA )
+        if( len < tunnel || *(pkt->p_buffer) != AMT_MULT_DATA) {
+            msg_Err(p_access, "Error pulling data from AMT socket. Length of data : %ld may be too short (should be minimum %d) - AMT header is %s",len, tunnel, (len > 0 && pkt->p_buffer[0] == AMT_MULT_DATA) ? "correct" : "incorrect" );
             goto error;
+        }
+
+        uint16_t payload_len = 0;
+        int is_fragmented = 0;
+        static uint32_t fragment_id = 0;
+
+        // determine the payload legnth from the IP header(s) and handle fragmentation if it occurs
+        int ipv = pkt->p_buffer[AMT_HDR_LEN] >> 4;
+        if(ipv == 4) {
+            payload_len = pkt->p_buffer[AMT_HDR_LEN + 2] << 8;
+            payload_len += pkt->p_buffer[AMT_HDR_LEN + 3];
+        } else if (ipv == 6) {
+            payload_len = pkt->p_buffer[AMT_HDR_LEN + 4] << 8;
+            payload_len += pkt->p_buffer[AMT_HDR_LEN + 5];
+
+            int next_hdr = pkt->p_buffer[AMT_HDR_LEN + 6];
+            is_fragmented = (next_hdr == 44);
+            if (!is_fragmented && next_hdr != 17) {
+                msg_Warn(p_access, "Received unexpected ip header in tunneled AMT data: next header = %d",next_hdr);
+                // we can probably survive this (provided there is no fragmentation) since we calculate the length as the difference between the length of the received data and the length listed in the ip header 
+            }
+
+            if (is_fragmented && len < tunnel + 8) {
+                msg_Err(p_access, "Received length of data %ld is smaller than minimum length for an ip header + fragmentation header (%d)",len, tunnel + 8);
+                goto error;
+            }
+
+            uint32_t tmp = 0;
+            memcpy(&tmp,&pkt->p_buffer[AMT_HDR_LEN + IPv6_FIXED_HDR_LEN + 4],4);
+            if (is_fragmented && !fragment_id){
+                // this is the start of a fragment, payload len in the ipv6 header will be wrong
+                payload_len = len - (tunnel + 8);
+                
+                fragment_id = tmp;
+
+                next_hdr = pkt->p_buffer[AMT_HDR_LEN + IPv6_FIXED_HDR_LEN];
+                if (next_hdr != 17) {
+                    msg_Err(p_access, "Received unexpected next header in ipv6 fragment header: next header = %d",next_hdr);
+                    goto error; // we actually need to be sure the next header is UDP othewrise we cant know the payload len without iterating 
+                }
+
+                msg_Dbg(p_access, "Start of new fragment, id is 0x%x (NETWORK BYTE ORDER) , first fragment's length is %u (%ld total - %d tunnel size) (mtu is %ld)",fragment_id, payload_len,len,tunnel,sys->mtu);
+            } else if (is_fragmented && fragment_id != tmp) {
+                msg_Warn(p_access, "Received fragment id does not match last seen fragment id : 0x%x expected vs 0x%x received",fragment_id,tmp);
+            } else if (is_fragmented) {
+                // this is a fragment, the payload len in the ipv6 header is right, just need to subtract fragmentation header length
+                payload_len -= 8;
+            }
+            
+            if (is_fragmented && (pkt->p_buffer[AMT_HDR_LEN + IPv6_FIXED_HDR_LEN + 3] & 1) == 0) {
+                fragment_id = 0; // no more fragments
+            }
+
+
+
+        } else {
+            msg_Err(p_access, "Received unexpected ip version in tunneled AMT data: %d",ipv);
+            goto error;
+        }
+
+        // if its fragmented, payload_len will be set correctly before we get here
+        if (!is_fragmented) {
+            payload_len -= UDP_HDR_LEN;
+        }
 
         /* Set the offet to the first byte of the payload */
-        shift += tunnel;
+        shift = len - payload_len;
+
+        if (shift < tunnel && !is_fragmented) {
+            msg_Err(p_access, "Length listed in the ip header is unrealistic: Only %ld bytes received but %u were listed in ip header. We should realistically be expecting a difference of at least %d bytes",len,payload_len,tunnel);
+            goto error;
+        }
 
         /* If the length received is less than the AMT tunnel header then it's truncated */
         if( len < tunnel )
         {
             msg_Err(p_access, "%zd bytes packet truncated (MTU was %zd)", len, sys->mtu);
             pkt->i_flags |= BLOCK_FLAG_CORRUPTED;
+        } else {
+        /* Otherwise subtract the length of the AMT encapsulation from the packet received */
+            len -= shift;
         }
 
-        /* Otherwise subtract the length of the AMT encapsulation from the packet received */
-        else
-        {
-            len -= tunnel;
-        }
-    }
+    } else {
     /* Otherwise pull native multicast */
-    else
-    {
         struct sockaddr temp;
         socklen_t temp_size = sizeof( struct sockaddr );
         len = recvfrom( sys->sAMT, (char *)pkt->p_buffer, sys->mtu + tunnel, 0, (struct sockaddr*)&temp, &temp_size );
+        if (len <= 0) {
+            msg_Err(p_access, "recv() call failed: %ld was returned", len);
+            goto error;
+        }
     }
 
     /* Set the offset to payload start */
     pkt->p_buffer += shift;
-    pkt->i_buffer -= shift;
+    pkt->i_buffer = len;
 
-    msg_Dbg(p_access, "Received mcast/amt packet of length %d",len);
+    msg_Dbg(p_access, "Received mcast/amt packet of length %ld",len);
     return pkt;
 
 error:
@@ -965,9 +1038,6 @@ static unsigned short get_checksum( unsigned short *buffer, int nLen )
         sum = (sum & 0xffff) + (sum >> 16);
     }
     
-    // sum = (sum >> 16) + (sum & 0xffff);
-    // sum += (sum >> 16);
-    
     answer = ~sum;
     return (answer);
 }
@@ -1021,7 +1091,8 @@ static void make_ip_header( amt_ip_alert_t *p_ipHead )
     p_ipHead->protocol = 0x02;
     p_ipHead->check = 0;
     p_ipHead->srcAddr = INADDR_ANY;
-    p_ipHead->options = 0x9404000;
+    // p_ipHead->options = 0x9404000;
+    p_ipHead->options = 0x0;
 }
 
 /**
