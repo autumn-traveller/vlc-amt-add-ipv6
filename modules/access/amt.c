@@ -296,7 +296,8 @@ typedef struct _access_sys_t
 
     vlc_timer_t updateTimer;
 
-    bool is_ipv4;
+    bool group_is_ipv4;
+    bool relay_is_ipv4;
     /* Mulicast group and source */
     union {
         struct sockaddr_in ipv4;
@@ -483,10 +484,10 @@ static int Open( vlc_object_t *p_this )
         msg_Err(p_access, "Could not convert binary socket address to string: %s", gai_strerror(errConv));
         goto cleanup;
     }
-    sys->is_ipv4 = serverinfo->ai_family == AF_INET;
+    sys->group_is_ipv4 = serverinfo->ai_family == AF_INET;
     mcastGroup = mcastGroup_buf;
     /* Store the binary socket representation of multicast group address */
-    if (sys->is_ipv4) {
+    if (sys->group_is_ipv4) {
         sys->mcastGroupAddr.ipv4 = *(struct sockaddr_in*)serverinfo->ai_addr;
     } else {
         sys->mcastGroupAddr.ipv6 = *(struct sockaddr_in6*)serverinfo->ai_addr;
@@ -514,7 +515,7 @@ static int Open( vlc_object_t *p_this )
     /* If strings are equal then no multicast source has been specified, so try anycast */
     if( strcmp( url.psz_host, mcastSrc ) == 0 )
     {
-        mcastSrc = MCAST_ANYCAST(sys->is_ipv4);
+        mcastSrc = MCAST_ANYCAST(sys->group_is_ipv4);
         memset(&sys->mcastSrcAddr,0,sizeof(sys->mcastSrcAddr));
         msg_Dbg( p_access, "No multicast source address specified, trying ASM...");
     } else {
@@ -529,8 +530,8 @@ static int Open( vlc_object_t *p_this )
             goto cleanup;
         }
 
-        if ((serverinfo->ai_family == AF_INET) != sys->is_ipv4) {
-            msg_Err(p_access, "Could not resolve multicast source address (%s) to the same family as the group address (%s)", serverinfo->ai_family == AF_INET ? "IPv4" : "IPv6", sys->is_ipv4 ? "IPv4" : "IPv6");
+        if ((serverinfo->ai_family == AF_INET) != sys->group_is_ipv4) {
+            msg_Err(p_access, "Could not resolve multicast source address (%s) to the same family as the group address (%s)", serverinfo->ai_family == AF_INET ? "IPv4" : "IPv6", sys->group_is_ipv4 ? "IPv4" : "IPv6");
             VLC_ret = VLC_EGENERIC;
             goto cleanup;
         }
@@ -544,7 +545,7 @@ static int Open( vlc_object_t *p_this )
         }
         mcastSrc = mcastSrc_buf;
         /* Store the binary socket representation of multicast source address */
-        if (sys->is_ipv4) {
+        if (sys->group_is_ipv4) {
             sys->mcastSrcAddr.ipv4 = *(struct sockaddr_in*)serverinfo->ai_addr;
         } else {
             sys->mcastSrcAddr.ipv6 = *(struct sockaddr_in6*)serverinfo->ai_addr;
@@ -624,9 +625,9 @@ static void Close( vlc_object_t *p_this )
     {
         // No clue why this was here before - what are we doing closing the native multicast sockets? if we are trying AMT they shouldnt be open
 
-        // int is_asm_ipv4 = sys->is_ipv4 && ((struct sockaddr_in*) &sys->mcastSrcAddr)->sin_addr.s_addr == 0;
+        // int is_asm_ipv4 = sys->group_is_ipv4 && ((struct sockaddr_in*) &sys->mcastSrcAddr)->sin_addr.s_addr == 0;
         // struct in6_addr ipv6_zero = IN6ADDR_ANY_INIT;
-        // int is_asm_ipv6 = !sys->is_ipv4 && memcmp(&((struct sockaddr_in6*) &sys->mcastSrcAddr)->sin6_addr,&ipv6_zero,128) == 0;
+        // int is_asm_ipv6 = !sys->group_is_ipv4 && memcmp(&((struct sockaddr_in6*) &sys->mcastSrcAddr)->sin6_addr,&ipv6_zero,128) == 0;
         // /* Prepare socket options */
         // if(!is_asm_ipv4 && !is_asm_ipv6){
         //     amt_leaveSSM_group( p_access );
@@ -644,7 +645,7 @@ static void Close( vlc_object_t *p_this )
         net_Close( sys->sAMT );
     if( sys->sQuery != -1 )
         net_Close( sys->sQuery );
-    if (!sys->is_ipv4 && sys->relay_query.mld.srcs){
+    if (!sys->group_is_ipv4 && sys->relay_query.mld.srcs){
         vlc_obj_free( p_this, sys->relay_query.mld.srcs);
     }
     if (sys) {
@@ -688,7 +689,7 @@ static block_t *BlockAMT(stream_t *p_access, bool *restrict eof)
 {
     access_sys_t *sys = p_access->p_sys;
     ssize_t len = 0, shift = 0;
-    int tunnel = UDP_HDR_LEN + AMT_HDR_LEN + (sys->is_ipv4 ? IP_HDR_LEN : IPv6_FIXED_HDR_LEN );
+    int tunnel = UDP_HDR_LEN + AMT_HDR_LEN + (sys->group_is_ipv4 ? IP_HDR_LEN : IPv6_FIXED_HDR_LEN );
 
     /* Allocate anticipated MTU buffer for holding the UDP packet suitable for native or AMT tunneled multicast */
     block_t *pkt = block_Alloc( sys->mtu + tunnel );
@@ -871,14 +872,10 @@ static bool open_amt_tunnel( stream_t *p_access )
         struct sockaddr *server_addr = server->ai_addr; // can be either an ipv4 struct sockaddr_in or a ipv6 struct sockaddr_in6
         char relay_ip[INET6_ADDRSTRLEN];
 
-        int is_ipv4 = server->ai_family == AF_INET;
-        if (sys->is_ipv4 != is_ipv4) {
-            msg_Dbg(p_access,"Resolved relay address family (%s) does not match family of resolved multicast address(es) (%s) ... trying next resolved address", is_ipv4 ? "IPv4" : "IPv6", sys->is_ipv4 ? "IPv4" : "IPv6");
-            continue;
-        }
+        sys->relay_is_ipv4 = server->ai_family == AF_INET;
 
         /* Convert to binary representation */
-        if( unlikely( inet_ntop(server->ai_family, is_ipv4 ? (void *) &((struct sockaddr_in *)server_addr)->sin_addr : (void *) &((struct sockaddr_in6 *)server_addr)->sin6_addr, relay_ip, INET6_ADDRSTRLEN) == NULL ) )
+        if( unlikely( inet_ntop(server->ai_family, sys->relay_is_ipv4 ? (void *) &((struct sockaddr_in *)server_addr)->sin_addr : (void *) &((struct sockaddr_in6 *)server_addr)->sin6_addr, relay_ip, INET6_ADDRSTRLEN) == NULL ) )
         {
             int errConv = errno;
             msg_Err(p_access, "Could not convert relay ip to binary representation: %s", gai_strerror(errConv));
@@ -886,7 +883,7 @@ static bool open_amt_tunnel( stream_t *p_access )
         }
 
         /* Store string representation */
-        memcpy(sys->relayDisco, relay_ip, is_ipv4 ? INET_ADDRSTRLEN : INET6_ADDRSTRLEN);
+        memcpy(sys->relayDisco, relay_ip, sys->relay_is_ipv4 ? INET_ADDRSTRLEN : INET6_ADDRSTRLEN);
         if( unlikely( sys->relayDisco == NULL ) )
         {
             goto error;
@@ -895,7 +892,7 @@ static bool open_amt_tunnel( stream_t *p_access )
         msg_Dbg( p_access, "Trying AMT Server: %s", sys->relayDisco);
 
         /* Store the binary representation */
-        if (is_ipv4) {
+        if (sys->relay_is_ipv4) {
             sys->relayDiscoAddr.ipv4 = *(struct sockaddr_in*)server_addr;
         } else {
             sys->relayDiscoAddr.ipv6 = *(struct sockaddr_in6*)server_addr;
@@ -942,8 +939,8 @@ static bool open_amt_tunnel( stream_t *p_access )
 
             /* Arm IGMP timer once we've confirmed we are getting packets */
             vlc_timer_schedule( sys->updateTimer, false,
-                        VLC_TICK_FROM_SEC( sys->is_ipv4 ? sys->relay_query.igmp.qqic : sys->relay_query.mld.qqic), 0 );
-            msg_Err(p_access, "Arming timer. qqic is %d",sys->is_ipv4 ? sys->relay_query.igmp.qqic : sys->relay_query.mld.qqic);
+                        VLC_TICK_FROM_SEC( sys->relay_is_ipv4 ? sys->relay_query.igmp.qqic : sys->relay_query.mld.qqic), 0 );
+            msg_Err(p_access, "Arming timer. qqic is %d",sys->relay_is_ipv4 ? sys->relay_query.igmp.qqic : sys->relay_query.mld.qqic);
 
             break;   /* found an active server sending UDP packets, so exit loop */
         }
@@ -1137,7 +1134,7 @@ static int amt_sockets_init( stream_t *p_access )
     int enable = 0, res = 0;
 
     /* create UDP socket */
-    sys->sAMT = vlc_socket( sys->is_ipv4 ? AF_INET : AF_INET6, SOCK_DGRAM, IPPROTO_UDP, true );
+    sys->sAMT = vlc_socket( sys->relay_is_ipv4 ? AF_INET : AF_INET6, SOCK_DGRAM, IPPROTO_UDP, true );
     if( sys->sAMT == -1 )
     {
         msg_Err( p_access, "Failed to create UDP socket" );
@@ -1159,15 +1156,15 @@ static int amt_sockets_init( stream_t *p_access )
     rcvAddr6.sin6_port        = htons( 0 );
     rcvAddr6.sin6_addr = (struct in6_addr) IN6ADDR_ANY_INIT;
 
-    rcvAddr = sys->is_ipv4 ? (struct sockaddr*) &rcvAddr4 : (struct sockaddr*) &rcvAddr6;
+    rcvAddr = sys->relay_is_ipv4 ? (struct sockaddr*) &rcvAddr4 : (struct sockaddr*) &rcvAddr6;
 
-    if( bind(sys->sAMT, rcvAddr, sys->is_ipv4 ? sizeof(rcvAddr4) : sizeof(rcvAddr6) ) != 0 )
+    if( bind(sys->sAMT, rcvAddr, sys->relay_is_ipv4 ? sizeof(rcvAddr4) : sizeof(rcvAddr6) ) != 0 )
     {
         msg_Err( p_access, "Failed to bind UDP socket error: %s", vlc_strerror(errno) );
         goto error;
     }
 
-    sys->sQuery = vlc_socket( sys->is_ipv4 ? AF_INET : AF_INET6, SOCK_DGRAM, IPPROTO_UDP, true );
+    sys->sQuery = vlc_socket( sys->relay_is_ipv4 ? AF_INET : AF_INET6, SOCK_DGRAM, IPPROTO_UDP, true );
     if( sys->sQuery == -1 )
     {
         msg_Err( p_access, "Failed to create query socket" );
@@ -1188,9 +1185,9 @@ static int amt_sockets_init( stream_t *p_access )
     stLocalAddr6.sin6_port = htons( 0 );
     stLocalAddr6.sin6_addr = (struct in6_addr) IN6ADDR_ANY_INIT;
 
-    struct sockaddr *stLocalAddr = sys->is_ipv4 ? (struct sockaddr*) &stLocalAddr4 : (struct sockaddr*) &stLocalAddr6;
+    struct sockaddr *stLocalAddr = sys->relay_is_ipv4 ? (struct sockaddr*) &stLocalAddr4 : (struct sockaddr*) &stLocalAddr6;
 
-    if( bind(sys->sQuery, stLocalAddr, sys->is_ipv4 ? sizeof(stLocalAddr4) : sizeof(stLocalAddr6) ) != 0 )
+    if( bind(sys->sQuery, stLocalAddr, sys->relay_is_ipv4 ? sizeof(stLocalAddr4) : sizeof(stLocalAddr6) ) != 0 )
     {
         msg_Err( p_access, "Failed to bind query socket" );
         goto error;
@@ -1246,7 +1243,7 @@ static void amt_send_relay_discovery_msg( stream_t *p_access, char *relay_ip )
     sys->glob_ulNonce = ulNonce;
 
     /* send it */
-    nRet = sendto( sys->sAMT, chaSendBuffer, sizeof(chaSendBuffer), 0, (struct sockaddr*) &sys->relayDiscoAddr, sys->is_ipv4 ? sizeof(struct sockaddr_in) : sizeof(struct sockaddr_in6));
+    nRet = sendto( sys->sAMT, chaSendBuffer, sizeof(chaSendBuffer), 0, (struct sockaddr*) &sys->relayDiscoAddr, sys->relay_is_ipv4 ? sizeof(struct sockaddr_in) : sizeof(struct sockaddr_in6));
 
     if( nRet < 0)
         msg_Err( p_access, "Sendto failed to %s with error: %s.", relay_ip, vlc_strerror_c(errno));
@@ -1290,7 +1287,7 @@ static void amt_send_relay_request( stream_t *p_access, char *relay_ip )
      */
 
     chaSendBuffer[0] = AMT_REQUEST;
-    chaSendBuffer[1] = sys->is_ipv4 ? 1 : 0;
+    chaSendBuffer[1] = !sys->group_is_ipv4;
     chaSendBuffer[2] = 0;
     chaSendBuffer[3] = 0;
 
@@ -1414,7 +1411,7 @@ static int amt_send_mem_update( stream_t *p_access, char *relay_ip, bool leave)
     ulNonce = sys->glob_ulNonce;
     memcpy( &pSendBuffer[8], &ulNonce, NONCE_LEN );
 
-    if (sys->is_ipv4) {
+    if (sys->group_is_ipv4) {
         /* make IP header for IGMP packet */
         amt_ip_alert_t p_ipHead;
         memset( &p_ipHead, 0, IP_HDR_IGMP_LEN );
@@ -1576,9 +1573,9 @@ static bool amt_rcv_relay_adv( stream_t *p_access )
     relayAddr6.sin6_port = htons( AMT_PORT );
     relayAddr6.sin6_family = AF_INET6;
 
-    memcpy( sys->is_ipv4 ? (void*) &relayAddr4.sin_addr : (void*) &relayAddr6.sin6_addr , &pkt[8], sys->is_ipv4 ? 4 : 16);
+    memcpy( sys->relay_is_ipv4 ? (void*) &relayAddr4.sin_addr : (void*) &relayAddr6.sin6_addr , &pkt[8], sys->relay_is_ipv4 ? 4 : 16); // maybe this should be dynamic, determining the address family based on the length of the response?
 
-    int nRet = connect( sys->sAMT, sys->is_ipv4 ? (struct sockaddr*)&relayAddr4 : (struct sockaddr*)&relayAddr6, sys->is_ipv4 ? sizeof(relayAddr4) : sizeof(relayAddr6) );
+    int nRet = connect( sys->sAMT, sys->relay_is_ipv4 ? (struct sockaddr*)&relayAddr4 : (struct sockaddr*)&relayAddr6, sys->relay_is_ipv4 ? sizeof(relayAddr4) : sizeof(relayAddr6) );
     if( nRet < 0 )
     {
         msg_Err( p_access, "Error connecting AMT UDP socket: %s", vlc_strerror(errno) );
@@ -1636,7 +1633,7 @@ static bool amt_rcv_relay_mem_query( stream_t *p_access )
 
     ssize_t len = recv( sys->sAMT, pkt, buf_len, 0 );
 
-    if (len <= 0 || (sys->is_ipv4 && len != RELAY_QUERY_MSG_LEN - 40) || (!sys->is_ipv4 && len < RELAY_QUERY_MSG_LEN)) // subtract 40 for ipv4 case
+    if (len <= 0 || (sys->group_is_ipv4 && len != RELAY_QUERY_MSG_LEN - 40) || (!sys->group_is_ipv4 && len < RELAY_QUERY_MSG_LEN)) // subtract 40 for ipv4 case
     {
         msg_Err(p_access, "length of relay query message invalid!");
         return false;
@@ -1652,7 +1649,7 @@ static bool amt_rcv_relay_mem_query( stream_t *p_access )
         return false;
     }
 
-    if (sys->is_ipv4) {
+    if (sys->group_is_ipv4) {
         size_t shift = AMT_HDR_LEN + MAC_LEN + NONCE_LEN + IP_HDR_IGMP_LEN;
         sys->relay_query.igmp.type = pkt[shift];
         shift++; assert( shift < RELAY_QUERY_MSG_LEN);
@@ -1730,5 +1727,5 @@ static void amt_update_timer_cb( void *data )
     /* Arms the timer again for a single shot from this callback. That way, the
      * time spent in amt_send_mem_update() is taken into consideration. */
     vlc_timer_schedule( sys->updateTimer, false,
-                        VLC_TICK_FROM_SEC( sys->is_ipv4 ? sys->relay_query.igmp.qqic : sys->relay_query.mld.qqic), 0 );
+                        VLC_TICK_FROM_SEC( sys->group_is_ipv4 ? sys->relay_query.igmp.qqic : sys->relay_query.mld.qqic), 0 );
 }
