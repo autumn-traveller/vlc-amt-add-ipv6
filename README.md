@@ -21,7 +21,7 @@ If building for the very first time you need to run `./bootstrap` and then `./co
 
 ## Execution
 
-After building execute `./vlc [[IPv6 address of source / empty if it can be any source (ASM)]@[IPv6 address of group]] --amt-relay [[IPv6 Address of an AMT relay (IPv6 addresses need to go inside square brackets)]]`
+After building execute `./vlc [[IPv6 address of source / empty if it can be any source (ASM)]]@[[IPv6 address of group]] --amt-relay [[IPv6 Address of an AMT relay (IPv6 addresses need to go inside square brackets)]]`
 
 Since all the changes are to the AMT module, in order to test the changes you need to find an IPv6 multicast stream (and probably an AMT relay too).
 

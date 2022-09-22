@@ -777,11 +777,12 @@ static block_t *BlockAMT(stream_t *p_access, bool *restrict eof)
                 msg_Dbg(p_access, "Start of new fragment, id is 0x%x (NETWORK BYTE ORDER) , first fragment's length is %u (%ld total - %d tunnel size) (mtu is %ld)",fragment_id, payload_len,len,tunnel,sys->mtu);
             } else if (is_fragmented && fragment_id != tmp) {
                 msg_Warn(p_access, "Received fragment id does not match last seen fragment id : 0x%x expected vs 0x%x received",fragment_id,tmp);
+                payload_len -= 8; // still try to receive it
             } else if (is_fragmented) {
-                // this is a fragment, the payload len in the ipv6 header is right, just need to subtract fragmentation header length
+                // this is a subsequent fragment, the payload len in the ipv6 header is right, just need to subtract fragmentation header length
                 payload_len -= 8;
             }
-            
+
             if (is_fragmented && (pkt->p_buffer[AMT_HDR_LEN + IPv6_FIXED_HDR_LEN + 3] & 1) == 0) {
                 fragment_id = 0; // no more fragments
             }
