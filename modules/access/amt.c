@@ -563,8 +563,8 @@ static int Open( vlc_object_t *p_this )
         goto cleanup;
     }
 
-    msg_Dbg( p_access, "Addresses: mcastGroup: %s mcastSrc: %s relay: %s", \
-             mcastGroup, mcastSrc, sys->relay);
+    msg_Dbg( p_access, "Addresses: mcastGroup: %s , mcastSrc: %s , (family is %s), relay: %s", \
+             mcastGroup, mcastSrc, sys->group_is_ipv4 ? "ipv4" : "ipv6", sys->relay);
 
     /* Native multicast file descriptor */
     sys->fd = net_OpenDgram( p_access, mcastGroup, i_bind_port,
@@ -724,8 +724,7 @@ static block_t *BlockAMT(stream_t *p_access, bool *restrict eof)
     }
 
     /* If using AMT tunneling perform basic checks and point to beginning of the payload */
-    if( sys->tryAMT )
-    {
+    if( sys->tryAMT ){
 
         /* AMT is a wrapper for UDP streams, so recv is used. */
         len = recv( sys->sAMT, pkt->p_buffer, sys->mtu + tunnel, 0 );
@@ -740,11 +739,16 @@ static block_t *BlockAMT(stream_t *p_access, bool *restrict eof)
         int is_fragmented = 0;
         static uint32_t fragment_id = 0;
 
-        // determine the payload legnth from the IP header(s) and handle fragmentation if it occurs
+        // determine the payload length from the IP header(s), and handle fragmentation if it occurs
         int ipv = pkt->p_buffer[AMT_HDR_LEN] >> 4;
         if(ipv == 4) {
             payload_len = pkt->p_buffer[AMT_HDR_LEN + 2] << 8;
             payload_len += pkt->p_buffer[AMT_HDR_LEN + 3];
+            // in ipv4 headers its the total length so we ned to subtract the ip header's length (bottom 4 bits of the first byte)
+            payload_len -= 4 * (pkt->p_buffer[AMT_HDR_LEN] & 0x0F);
+
+            //TODO: handle ipv4 fragmentation
+
         } else if (ipv == 6) {
             payload_len = pkt->p_buffer[AMT_HDR_LEN + 4] << 8;
             payload_len += pkt->p_buffer[AMT_HDR_LEN + 5];
@@ -803,15 +807,16 @@ static block_t *BlockAMT(stream_t *p_access, bool *restrict eof)
         /* Set the offet to the first byte of the payload */
         shift = len - payload_len;
 
-        if (shift < tunnel && !is_fragmented) {
-            msg_Err(p_access, "Length listed in the ip header is unrealistic: Only %ld bytes received but %u were listed in ip header. We should realistically be expecting a difference of at least %d bytes",len,payload_len,tunnel);
+        if (!payload_len || (shift < tunnel && !is_fragmented)) {
+            msg_Err(p_access, "Length listed in the ip header is unrealistic: %ld bytes received but %u were listed in ip header. Tunnel overhead should be %d bytes",len,payload_len,tunnel);
             goto error;
         }
+
 
         /* If the length received is less than the AMT tunnel header then it's truncated */
         if( len < tunnel )
         {
-            msg_Err(p_access, "%zd bytes packet truncated (MTU was %zd)", len, sys->mtu);
+            msg_Err(p_access, "%zd byte packet truncated (MTU was %zd)", len, sys->mtu);
             pkt->i_flags |= BLOCK_FLAG_CORRUPTED;
         } else {
         /* Otherwise subtract the length of the AMT encapsulation from the packet received */
@@ -889,7 +894,7 @@ static bool open_amt_tunnel( stream_t *p_access )
             goto error;
         }
 
-        msg_Dbg( p_access, "Trying AMT Server: %s", sys->relayDisco);
+        msg_Dbg( p_access, "Trying AMT Server: %s (family is %s)", sys->relayDisco, sys->relay_is_ipv4 ? "ipv4" : "ipv6");
 
         /* Store the binary representation */
         if (sys->relay_is_ipv4) {
@@ -1431,11 +1436,11 @@ static int amt_send_mem_update( stream_t *p_access, char *relay_ip, bool leave)
         groupRcd.auxDatalen = 0;
         groupRcd.ssm = sys->mcastGroupAddr.ipv4.sin_addr.s_addr;
 
-        if( sys->mcastGroupAddr.ipv4.sin_addr.s_addr )
+        if( sys->mcastSrcAddr.ipv4.sin_addr.s_addr )
         {
             groupRcd.type = leave ? AMT_IGMP_BLOCK:AMT_IGMP_INCLUDE;
             groupRcd.nSrc = htons(1);
-            groupRcd.srcIP[0] = sys->mcastGroupAddr.ipv4.sin_addr.s_addr;
+            groupRcd.srcIP[0] = sys->mcastSrcAddr.ipv4.sin_addr.s_addr;
 
         } else {
             groupRcd.type = leave ? AMT_IGMP_INCLUDE_CHANGE:AMT_IGMP_EXCLUDE_CHANGE;
