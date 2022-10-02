@@ -125,6 +125,7 @@
 #define AMT_IGMP_BLOCK 0x06
 
 #define AMT_MLD_MCAST_ADDRESS_RECORD_TYPE_ALLOW_NEW_SOURCES 5
+#define AMT_MLD_MCAST_ADDRESS_RECORD_TYPE_BLOCK_OLD_SOURCES 6
 #define AMT_MLD_REPORT_TYPE 143
 #define AMT_MLD_QUERY_TYPE 130
 #define AMT_MLD_DONE_TYPE 132
@@ -972,7 +973,7 @@ error:
 /**
  * Calculate checksum
  * */
-static unsigned short ipv6_checksum(stream_t *p_access, unsigned short *buffer, int nLen/*, struct in6_addr *src, struct in6_addr *dst, uint32_t icmp_len */)
+static unsigned short ipv6_checksum(unsigned short *buffer, int nLen)
 {
     int nleft = nLen;
     int sum = 0;
@@ -1048,14 +1049,14 @@ static unsigned short get_checksum( unsigned short *buffer, int nLen )
 /**
  * Make MLD Listener report
  * */
-static int make_mld_report( stream_t *p_access, amt_mldv2_listener_report_t *report, struct in6_addr *group, struct in6_addr *src)
+static int make_mld_report( stream_t *p_access, bool leave, amt_mldv2_listener_report_t *report, struct in6_addr *group, struct in6_addr *src)
 {
    
     report->type = AMT_MLD_REPORT_TYPE;
     report->code = 0;
     report->checksum = 0;
     report->num_records = 1;
-    report->records[0].record_type = AMT_MLD_MCAST_ADDRESS_RECORD_TYPE_ALLOW_NEW_SOURCES;
+    report->records[0].record_type = leave ? AMT_MLD_MCAST_ADDRESS_RECORD_TYPE_BLOCK_OLD_SOURCES : AMT_MLD_MCAST_ADDRESS_RECORD_TYPE_ALLOW_NEW_SOURCES;
     report->records[0].aux_data_len = 0;
     report->records[0].num_srcs = 1;
     report->records[0].mcast_address = *group;
@@ -1380,8 +1381,7 @@ static int serialize_mld_report(amt_mldv2_listener_report_t *report, uint8_t *bu
     i += 16;
 
     // get checksum over buffer and write it back into the right place
-    tmp = htons(ipv6_checksum(p_access,(unsigned short*)buf, buflen));
-    // tmp = htons(ipv6_checksum((unsigned short*)buf, buflen, src, dst, icmp_len));
+    tmp = htons(ipv6_checksum((unsigned short*)buf, buflen));
     msg_Dbg( p_access , "Ipv6 Checksum is 0x%x",tmp);
     buf[2] = tmp >> 8;
     buf[3] = tmp & 0xFF;
@@ -1479,7 +1479,7 @@ static int amt_send_mem_update( stream_t *p_access, char *relay_ip, bool leave)
 
         make_ipv6(&ip, IPv6_HOP_BY_HOP_OPTION_LEN + MLD_REPORT_LEN, &tmp);
 
-        if(make_mld_report(p_access,&report,&sys->mcastGroupAddr.ipv6.sin6_addr,&sys->mcastSrcAddr.ipv6.sin6_addr)){
+        if(make_mld_report(p_access,leave,&report,&sys->mcastGroupAddr.ipv6.sin6_addr,&sys->mcastSrcAddr.ipv6.sin6_addr)){
             goto oom;
         }
 
