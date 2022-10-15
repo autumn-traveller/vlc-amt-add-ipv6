@@ -84,7 +84,7 @@
 #define IGMP_QUERY_LEN 24        /* length of encapsulated IGMP query message */
 #define IGMP_REPORT_LEN 20
 #define AMT_IPV6_MAX_NUM_SOURCES 10 /* arbirtry maximum length on the number sources we will read from an MLD Queries' address records */
-#define MLD_ADDRESS_RECORD_LEN 36 // assuming no auxiliary data
+#define MLD_ADDRESS_RECORD_LEN 36 /* assuming no auxiliary data */
 #define MLD_HEADER_LEN 8
 #define MLD_REPORT_LEN (MLD_HEADER_LEN + MLD_ADDRESS_RECORD_LEN) /* 8 Byte Fixed MLD Header + the Address record (44 bytes)*/
 #define AMT_HDR_LEN 2            /* length of AMT header on a packet */
@@ -155,25 +155,25 @@ typedef struct _amt_ip {
 } amt_ip_t;
 
 typedef struct {
-    uint8_t next_header; // 58 -> ICMPv6
-    uint8_t length; // 0 ?
+    uint8_t next_header; /* 58  (ICMPv6) */
+    uint8_t length;
     struct {
-      uint8_t type; // 5 
-      uint8_t length;  // 2
-      uint16_t router_alert; // 0 for MLD
+      uint8_t type; /* 5 */ 
+      uint8_t length;  /* 2 */
+      uint16_t router_alert; /* 0 for MLD */
     } router_alert;
     struct {
         uint8_t type;
-        uint8_t length; // this should usually be 0 for our purposes
+        uint8_t length; /* this should usually be 0 for our purposes */
     } padding_option; 
 } ipv6_hop_by_hop_option_t;
 
 typedef struct {
-    uint8_t version; // 4 bits = 6 for ipv6
-    uint8_t traffic_class; // 0 for now
-    uint32_t flow_label; // 20 bits, 0 for now
+    uint8_t version; /* 4 bits, = 6 for ipv6 */
+    uint8_t traffic_class; /* 0 for now */
+    uint32_t flow_label; /* 20 bits, 0 for now */
     uint16_t payload_len;
-    uint8_t next_header; // 0 -> hop by hop option
+    uint8_t next_header; /* 0 (hop by hop option) */
     uint8_t hop_limit;
     struct in6_addr srcAddr;
     struct in6_addr dstAddr;
@@ -229,7 +229,7 @@ typedef struct _amt_igmpv3_membership_query {
 /* MLDv2 Multicast Address Record Format */
 typedef struct {
     uint8_t record_type;
-    uint8_t aux_data_len; // length in 32 bit units
+    uint8_t aux_data_len; /* length in 32 bit units */
     uint16_t num_srcs;
     struct in6_addr mcast_address;
     struct in6_addr *sources;
@@ -238,13 +238,13 @@ typedef struct {
 
 /* MLDv2 Multicast Listener Query Message */
 typedef struct {
-    uint8_t type; // 130
+    uint8_t type; /* 130 */
     uint8_t code;
     uint16_t checksum;
     uint16_t max_resp_code;
     struct in6_addr mcast_address;
     bool s_flag;
-    uint8_t qrv; // 4 bits
+    uint8_t qrv; /* 4 bits */
     uint8_t qqic;
     uint16_t num_srcs;
     struct in6_addr *srcs;
@@ -252,7 +252,7 @@ typedef struct {
 
 /* MLDv2 Multicast Listener Report Message */
 typedef struct {
-    uint8_t type; // 143
+    uint8_t type; /* 143 */
     uint8_t code;
     uint16_t checksum;
     uint16_t num_records;
@@ -261,7 +261,7 @@ typedef struct {
 
 /* MLDv1 Multicast Listener Done Message*/
 typedef struct {
-    uint8_t type; // 132
+    uint8_t type; /* 132 */
     uint8_t code;
     uint16_t checksum;
     uint16_t max_resp_delay;
@@ -319,7 +319,7 @@ typedef struct _access_sys_t
         uint32_t ulRcvedNonce;
         uint8_t  type;
         uint8_t  uchaMAC[MAC_LEN];
-        // uint8_t  uchaIGMP[IGMP_QUERY_LEN];
+        /* uint8_t  uchaIGMP[IGMP_QUERY_LEN]; */
     } relay_mem_query_msg;
 
     union {
@@ -383,24 +383,27 @@ static int Open( vlc_object_t *p_this )
     vlc_url_t            url = { 0 };
 
     if( p_access->b_preparsing )
+    {
         return VLC_EGENERIC;
+    }
 
     /* Set up p_access */
     ACCESS_SET_CALLBACKS( NULL, BlockAMT, Control, NULL );
 
     if( !p_access->psz_location )
+    {
         return VLC_EGENERIC;
+    }
 
     /* Allocate the structure for holding AMT info and zeroize it */
     sys = vlc_obj_calloc( p_this, 1, sizeof( *sys ) );
-    if( unlikely( sys == NULL ) ) {
+    if( unlikely( sys == NULL ) )
+    {
         return VLC_ENOMEM;
     }
     sys->vlc_obj = p_this;
 
-    /* The standard MPEG-2 transport is 188 bytes.  7 packets fit into a standard 1500 byte Ethernet frame */
-    // sys->mtu = 7 * 188;
-    sys->mtu = 1500; // for fragmentation case
+    sys->mtu = 1500; 
 
     p_access->p_sys = sys;
 
@@ -445,7 +448,8 @@ static int Open( vlc_object_t *p_this )
     /*                                                                        */
 
     /* If UDP port provided then assign port to stream */
-    if( url.i_port > 0 ) {
+    if( url.i_port > 0 )
+    {
         msg_Dbg( p_access, "Parsed AMT URL port %d",url.i_port);
         i_bind_port = url.i_port;
     }
@@ -488,9 +492,12 @@ static int Open( vlc_object_t *p_this )
     sys->group_is_ipv4 = serverinfo->ai_family == AF_INET;
     mcastGroup = mcastGroup_buf;
     /* Store the binary socket representation of multicast group address */
-    if (sys->group_is_ipv4) {
+    if ( sys->group_is_ipv4 )
+    {
         sys->mcastGroupAddr.ipv4 = *(struct sockaddr_in*)serverinfo->ai_addr;
-    } else {
+    }
+    else
+    {
         sys->mcastGroupAddr.ipv6 = *(struct sockaddr_in6*)serverinfo->ai_addr;
     }
     /* Release the allocated memory */
@@ -519,7 +526,9 @@ static int Open( vlc_object_t *p_this )
         mcastSrc = MCAST_ANYCAST(sys->group_is_ipv4);
         memset(&sys->mcastSrcAddr,0,sizeof(sys->mcastSrcAddr));
         msg_Dbg( p_access, "No multicast source address specified, trying ASM...");
-    } else {
+    }
+    else
+    {
         /* retrieve list of source addresses matching the multicast source identifier */
         response = vlc_getaddrinfo( mcastSrc, AMT_PORT, &hints, &serverinfo );
 
@@ -531,7 +540,8 @@ static int Open( vlc_object_t *p_this )
             goto cleanup;
         }
 
-        if ((serverinfo->ai_family == AF_INET) != sys->group_is_ipv4) {
+        if ( (serverinfo->ai_family == AF_INET) != sys->group_is_ipv4 )
+        {
             msg_Err(p_access, "Could not resolve multicast source address (%s) to the same family as the group address (%s)", serverinfo->ai_family == AF_INET ? "IPv4" : "IPv6", sys->group_is_ipv4 ? "IPv4" : "IPv6");
             VLC_ret = VLC_EGENERIC;
             goto cleanup;
@@ -546,7 +556,8 @@ static int Open( vlc_object_t *p_this )
         }
         mcastSrc = mcastSrc_buf;
         /* Store the binary socket representation of multicast source address */
-        if (sys->group_is_ipv4) {
+        if ( sys->group_is_ipv4 )
+        {
             sys->mcastSrcAddr.ipv4 = *(struct sockaddr_in*)serverinfo->ai_addr;
         } else {
             sys->mcastSrcAddr.ipv6 = *(struct sockaddr_in6*)serverinfo->ai_addr;
@@ -593,17 +604,23 @@ cleanup: /* fall through */
 
     vlc_obj_free( p_this, psz_name );
     vlc_UrlClean( &url );
-    if( serverinfo ) {
+    if( serverinfo )
+    {
         freeaddrinfo( serverinfo );
     }
 
     if ( VLC_ret != VLC_SUCCESS )
     {
-        free( sys->relay );
-        if( sys->fd != -1 ) {
+        if ( sys->relay )
+        {
+            free( sys->relay );
+        }
+        if( sys->fd != -1 )
+        {
             net_Close( sys->fd );
         }
-        if (sys) {
+        if ( sys )
+        {
             vlc_obj_free( p_this, sys);
         }
     }
@@ -624,18 +641,6 @@ static void Close( vlc_object_t *p_this )
     /* If using AMT tunneling send leave message and free the relay addresses */
     if ( sys->tryAMT )
     {
-        // No clue why this was here before - what are we doing closing the native multicast sockets? if we are trying AMT they shouldnt be open
-
-        // int is_asm_ipv4 = sys->group_is_ipv4 && ((struct sockaddr_in*) &sys->mcastSrcAddr)->sin_addr.s_addr == 0;
-        // struct in6_addr ipv6_zero = IN6ADDR_ANY_INIT;
-        // int is_asm_ipv6 = !sys->group_is_ipv4 && memcmp(&((struct sockaddr_in6*) &sys->mcastSrcAddr)->sin6_addr,&ipv6_zero,128) == 0;
-        // /* Prepare socket options */
-        // if(!is_asm_ipv4 && !is_asm_ipv6){
-        //     amt_leaveSSM_group( p_access );
-        // } else {
-        //     amt_leaveASM_group( p_access );
-        // }
-
         /* Send IGMP leave message */
         amt_send_mem_update( p_access, sys->relayDisco, true );
     }
@@ -643,13 +648,19 @@ static void Close( vlc_object_t *p_this )
 
     net_Close( sys->fd );
     if( sys->sAMT != -1 )
+    {
         net_Close( sys->sAMT );
+    }
     if( sys->sQuery != -1 )
+    {
         net_Close( sys->sQuery );
-    if (!sys->group_is_ipv4 && sys->relay_query.mld.srcs){
+    }
+    if ( !sys->group_is_ipv4 && sys->relay_query.mld.srcs )
+    {
         vlc_obj_free( p_this, sys->relay_query.mld.srcs);
     }
-    if (sys) {
+    if ( sys )
+    {
         vlc_obj_free( p_this, sys);
     }
 }
@@ -690,22 +701,28 @@ static block_t *BlockAMT(stream_t *p_access, bool *restrict eof)
 {
     access_sys_t *sys = p_access->p_sys;
     ssize_t len = 0, shift = 0;
-    int tunnel = UDP_HDR_LEN + AMT_HDR_LEN + (sys->group_is_ipv4 ? IP_HDR_LEN : IPv6_FIXED_HDR_LEN );
+    int i_tunnel = UDP_HDR_LEN + AMT_HDR_LEN + (sys->group_is_ipv4 ? IP_HDR_LEN : IPv6_FIXED_HDR_LEN );
 
     /* Allocate anticipated MTU buffer for holding the UDP packet suitable for native or AMT tunneled multicast */
-    block_t *pkt = block_Alloc( sys->mtu + tunnel );
+    block_t *pkt = block_Alloc( sys->mtu + i_tunnel );
     if ( unlikely( pkt == NULL ) )
+    {
         return NULL;
+    }
 
     struct pollfd ufd[1];
 
     if( sys->tryAMT )
+    {
         ufd[0].fd = sys->sAMT; /* AMT tunneling file descriptor */
+    }
     else
+    {
         ufd[0].fd = sys->fd;   /* Native multicast file descriptor */
+    }
     ufd[0].events = POLLIN;
 
-    switch (vlc_poll_i11e(ufd, 1, sys->timeout))
+    switch ( vlc_poll_i11e(ufd, 1, sys->timeout) )
     {
         case 0:
             if( !sys->tryAMT )
@@ -725,97 +742,113 @@ static block_t *BlockAMT(stream_t *p_access, bool *restrict eof)
     }
 
     /* If using AMT tunneling perform basic checks and point to beginning of the payload */
-    if( sys->tryAMT ){
+    if( sys->tryAMT )
+    {
 
         /* AMT is a wrapper for UDP streams, so recv is used. */
-        len = recv( sys->sAMT, pkt->p_buffer, sys->mtu + tunnel, 0 );
+        len = recv( sys->sAMT, pkt->p_buffer, sys->mtu + i_tunnel, 0 );
 
         /* Check for the integrity of the received AMT packet */
-        if( len < tunnel || *(pkt->p_buffer) != AMT_MULT_DATA) {
-            msg_Err(p_access, "Error pulling data from AMT socket. Length of data : %ld may be too short (should be minimum %d) - AMT header is %s",len, tunnel, (len > 0 && pkt->p_buffer[0] == AMT_MULT_DATA) ? "correct" : "incorrect" );
+        if( len < i_tunnel || *(pkt->p_buffer) != AMT_MULT_DATA )
+        {
+            msg_Err(p_access, "Error pulling data from AMT socket. Length of data : %ld may be too short (should be minimum %d) - AMT header is %s",len, i_tunnel, (len > 0 && pkt->p_buffer[0] == AMT_MULT_DATA) ? "correct" : "incorrect" );
             goto error;
         }
 
         uint16_t payload_len = 0;
-        int is_fragmented = 0;
+        bool b_is_fragmented = 0;
         static uint32_t fragment_id = 0;
 
-        // determine the payload length from the IP header(s), and handle fragmentation if it occurs
-        int ipv = pkt->p_buffer[AMT_HDR_LEN] >> 4;
-        if(ipv == 4) {
+        /* determine the payload length from the IP header(s), and handle fragmentation if it occurs */
+        int i_ipv = pkt->p_buffer[AMT_HDR_LEN] >> 4;
+        if( i_ipv == 4 )
+        {
             payload_len = pkt->p_buffer[AMT_HDR_LEN + 2] << 8;
             payload_len += pkt->p_buffer[AMT_HDR_LEN + 3];
-            // in ipv4 headers its the total length so we ned to subtract the ip header's length (bottom 4 bits of the first byte)
+            /* in ipv4 headers its the total length so we ned to subtract the ip header's length (bottom 4 bits of the first byte) */
             payload_len -= 4 * (pkt->p_buffer[AMT_HDR_LEN] & 0x0F);
 
-            //TODO: handle ipv4 fragmentation
-
-        } else if (ipv == 6) {
+        }
+        else if ( i_ipv == 6 )
+        {
             payload_len = pkt->p_buffer[AMT_HDR_LEN + 4] << 8;
             payload_len += pkt->p_buffer[AMT_HDR_LEN + 5];
 
-            int next_hdr = pkt->p_buffer[AMT_HDR_LEN + 6];
-            is_fragmented = (next_hdr == 44);
-            if (!is_fragmented && next_hdr != 17) {
-                msg_Warn(p_access, "Received unexpected ip header in tunneled AMT data: next header = %d",next_hdr);
-                // we can probably survive this (provided there is no fragmentation) since we calculate the length as the difference between the length of the received data and the length listed in the ip header 
+            int i_next_hdr = pkt->p_buffer[AMT_HDR_LEN + 6];
+            b_is_fragmented = (i_next_hdr == 44);
+            if ( !b_is_fragmented && i_next_hdr != 17 )
+            {
+                msg_Warn(p_access, "Received unexpected ip header in tunneled AMT data: next header = %d",i_next_hdr);
+                /* we can probably survive this (provided there is no fragmentation) since we calculate the length as the difference between the length of the received data and the length listed in the ip header */ 
             }
 
-            if (is_fragmented && len < tunnel + 8) {
-                msg_Err(p_access, "Received length of data %ld is smaller than minimum length for an ip header + fragmentation header (%d)",len, tunnel + 8);
+            if ( b_is_fragmented && len < i_tunnel + 8 )
+            {
+                msg_Err(p_access, "Received length of data %ld is smaller than minimum length for an ip header + fragmentation header (%d)",len, i_tunnel + 8);
                 goto error;
             }
 
             uint32_t tmp = 0;
             memcpy(&tmp,&pkt->p_buffer[AMT_HDR_LEN + IPv6_FIXED_HDR_LEN + 4],4);
-            if (is_fragmented && !fragment_id){
-                // this is the start of a fragment, payload len in the ipv6 header will be wrong
-                payload_len = len - (tunnel + 8);
+            if ( b_is_fragmented && !fragment_id )
+            {
+                /* this is the start of a fragment, payload len in the ipv6 header will be wrong */
+                payload_len = len - (i_tunnel + 8);
                 
                 fragment_id = tmp;
 
-                next_hdr = pkt->p_buffer[AMT_HDR_LEN + IPv6_FIXED_HDR_LEN];
-                if (next_hdr != 17) {
-                    msg_Err(p_access, "Received unexpected next header in ipv6 fragment header: next header = %d",next_hdr);
-                    goto error; // we actually need to be sure the next header is UDP othewrise we cant know the payload len without iterating 
+                i_next_hdr = pkt->p_buffer[AMT_HDR_LEN + IPv6_FIXED_HDR_LEN];
+                if ( i_next_hdr != 17 )
+                {
+                    msg_Err(p_access, "Received unexpected next header in ipv6 fragment header: next header = %d",i_next_hdr);
+                    goto error; /* here we actually need to be sure the next header is UDP othewrise we cant know the payload length */
                 }
 
-                msg_Dbg(p_access, "Start of new fragment, id is 0x%x (NETWORK BYTE ORDER) , first fragment's length is %u (%ld total - %d tunnel size) (mtu is %ld)",fragment_id, payload_len,len,tunnel,sys->mtu);
-            } else if (is_fragmented && fragment_id != tmp) {
+                msg_Dbg(p_access, "Start of new fragment, id is 0x%x (NETWORK BYTE ORDER) , first fragment's length is %u (%ld total - %d tunnel size) (mtu is %ld)",fragment_id, payload_len,len,i_tunnel,sys->mtu);
+            }
+            else if ( b_is_fragmented && fragment_id != tmp )
+            {
                 msg_Warn(p_access, "Received fragment id does not match last seen fragment id : 0x%x expected vs 0x%x received",fragment_id,tmp);
-                payload_len -= 8; // still try to receive it
-            } else if (is_fragmented) {
-                // this is a subsequent fragment, the payload len in the ipv6 header is right, just need to subtract fragmentation header length
+                payload_len -= 8; /* still try to receive it */
+            }
+            else if ( b_is_fragmented )
+            {
+                /* this is a subsequent fragment, the payload len in the ipv6 header is right, just need to subtract fragmentation header length */
                 payload_len -= 8;
             }
 
-            if (is_fragmented && (pkt->p_buffer[AMT_HDR_LEN + IPv6_FIXED_HDR_LEN + 3] & 1) == 0) {
-                fragment_id = 0; // no more fragments
+            if ( b_is_fragmented && (pkt->p_buffer[AMT_HDR_LEN + IPv6_FIXED_HDR_LEN + 3] & 1) == 0 )
+            {
+                fragment_id = 0; /* no more fragments */
             }
 
 
 
-        } else {
-            msg_Err(p_access, "Received unexpected ip version in tunneled AMT data: %d",ipv);
+        }
+        else
+        {
+            msg_Err(p_access, "Received unexpected ip version in tunneled AMT data: %d",i_ipv);
             goto error;
         }
 
-        // if its fragmented, payload_len will be set correctly before we get here
-        if (!is_fragmented) {
+        /* if its fragmented, payload_len will be set correctly before we get here */
+        if ( !b_is_fragmented )
+        {
             payload_len -= UDP_HDR_LEN;
         }
 
         /* Set the offet to the first byte of the payload */
         shift = len - payload_len;
 
-        if (!payload_len || (shift < tunnel && !is_fragmented)) {
-            msg_Err(p_access, "Length listed in the ip header is unrealistic: %ld bytes received but %u were listed in ip header. Tunnel overhead should be %d bytes",len,payload_len,tunnel);
+        if ( !payload_len || (shift < i_tunnel && !b_is_fragmented) )
+        {
+            msg_Err(p_access, "Length listed in the ip header is unrealistic: %ld bytes received but %u were listed in ip header. Tunnel overhead should be %d bytes",len,payload_len,i_tunnel);
             goto error;
         }
 
 
         /* If the length received is less than the AMT tunnel header then it's truncated */
-        if( len < tunnel )
+        if( len < i_tunnel )
         {
             msg_Err(p_access, "%zd byte packet truncated (MTU was %zd)", len, sys->mtu);
             pkt->i_flags |= BLOCK_FLAG_CORRUPTED;
@@ -828,8 +861,9 @@ static block_t *BlockAMT(stream_t *p_access, bool *restrict eof)
     /* Otherwise pull native multicast */
         struct sockaddr temp;
         socklen_t temp_size = sizeof( struct sockaddr );
-        len = recvfrom( sys->sAMT, (char *)pkt->p_buffer, sys->mtu + tunnel, 0, (struct sockaddr*)&temp, &temp_size );
-        if (len <= 0) {
+        len = recvfrom( sys->sAMT, (char *)pkt->p_buffer, sys->mtu + i_tunnel, 0, (struct sockaddr*)&temp, &temp_size );
+        if ( len <= 0 )
+        {
             msg_Err(p_access, "recv() call failed: %ld was returned", len);
             goto error;
         }
@@ -863,33 +897,33 @@ static bool open_amt_tunnel( stream_t *p_access )
     sys->tryAMT = true;
 
     /* Retrieve list of addresses matching the AMT relay */
-    int response = vlc_getaddrinfo( sys->relay, AMT_PORT, &hints, &serverinfo );
+    int i_response = vlc_getaddrinfo( sys->relay, AMT_PORT, &hints, &serverinfo );
 
     /* If an error returned print reason and exit */
-    if( response != 0 )
+    if( i_response != 0 )
     {
-        msg_Err( p_access, "Could not find relay %s, reason: %s", sys->relay, gai_strerror(response) );
+        msg_Err( p_access, "Could not find relay %s, reason: %s", sys->relay, gai_strerror(i_response) );
         goto error;
     }
 
     /* Iterate through the list of sockets to find one that works */
-    for (server = serverinfo; server != NULL && !vlc_killed(); server = server->ai_next)
+    for ( server = serverinfo; server != NULL && !vlc_killed(); server = server->ai_next )
     {
-        struct sockaddr *server_addr = server->ai_addr; // can be either an ipv4 struct sockaddr_in or a ipv6 struct sockaddr_in6
-        char relay_ip[INET6_ADDRSTRLEN];
+        struct sockaddr *server_addr = server->ai_addr; /* can be either an ipv4 struct sockaddr_in or a ipv6 struct sockaddr_in6 */
+        char psz_relay_ip[INET6_ADDRSTRLEN];
 
         sys->relay_is_ipv4 = server->ai_family == AF_INET;
 
         /* Convert to binary representation */
-        if( unlikely( inet_ntop(server->ai_family, sys->relay_is_ipv4 ? (void *) &((struct sockaddr_in *)server_addr)->sin_addr : (void *) &((struct sockaddr_in6 *)server_addr)->sin6_addr, relay_ip, INET6_ADDRSTRLEN) == NULL ) )
+        if( unlikely( inet_ntop(server->ai_family, sys->relay_is_ipv4 ? (void *) &((struct sockaddr_in *)server_addr)->sin_addr : (void *) &((struct sockaddr_in6 *)server_addr)->sin6_addr, psz_relay_ip, INET6_ADDRSTRLEN) == NULL ) )
         {
-            int errConv = errno;
-            msg_Err(p_access, "Could not convert relay ip to binary representation: %s", gai_strerror(errConv));
+            int i_errConv = errno;
+            msg_Err(p_access, "Could not convert relay ip to binary representation: %s", gai_strerror(i_errConv));
             goto error;
         }
 
         /* Store string representation */
-        memcpy(sys->relayDisco, relay_ip, sys->relay_is_ipv4 ? INET_ADDRSTRLEN : INET6_ADDRSTRLEN);
+        memcpy(sys->relayDisco, psz_relay_ip, sys->relay_is_ipv4 ? INET_ADDRSTRLEN : INET6_ADDRSTRLEN);
         if( unlikely( sys->relayDisco == NULL ) )
         {
             goto error;
@@ -898,50 +932,53 @@ static bool open_amt_tunnel( stream_t *p_access )
         msg_Dbg( p_access, "Trying AMT Server: %s (family is %s)", sys->relayDisco, sys->relay_is_ipv4 ? "ipv4" : "ipv6");
 
         /* Store the binary representation */
-        if (sys->relay_is_ipv4) {
+        if ( sys->relay_is_ipv4 )
+        {
             sys->relayDiscoAddr.ipv4 = *(struct sockaddr_in*)server_addr;
         } else {
             sys->relayDiscoAddr.ipv6 = *(struct sockaddr_in6*)server_addr;
         }
 
         if( amt_sockets_init( p_access ) != 0 )
+        {
             continue; /* Try next server */
+        }
 
         /* Negotiate with AMT relay and confirm you can pull a UDP packet  */
-        amt_send_relay_discovery_msg( p_access, relay_ip );
-        msg_Dbg( p_access, "Sent relay AMT discovery message to %s", relay_ip );
+        amt_send_relay_discovery_msg( p_access, psz_relay_ip );
+        msg_Dbg( p_access, "Sent relay AMT discovery message to %s", psz_relay_ip );
 
         if( !amt_rcv_relay_adv( p_access ) )
         {
-            msg_Err( p_access, "Error receiving AMT relay advertisement msg from %s, skipping", relay_ip );
+            msg_Err( p_access, "Error receiving AMT relay advertisement msg from %s, skipping", psz_relay_ip );
             goto error;
         }
-        msg_Dbg( p_access, "Received AMT relay advertisement from %s", relay_ip );
+        msg_Dbg( p_access, "Received AMT relay advertisement from %s", psz_relay_ip );
 
-        amt_send_relay_request( p_access, relay_ip );
-        msg_Dbg( p_access, "Sent AMT relay request message to %s", relay_ip );
+        amt_send_relay_request( p_access, psz_relay_ip );
+        msg_Dbg( p_access, "Sent AMT relay request message to %s", psz_relay_ip );
 
         if( !amt_rcv_relay_mem_query( p_access ) )
         {
-            msg_Err( p_access, "Could not receive AMT relay membership query from %s, vlc errno: %s", relay_ip, vlc_strerror(errno));
+            msg_Err( p_access, "Could not receive AMT relay membership query from %s, vlc errno: %s", psz_relay_ip, vlc_strerror(errno));
             goto error;
         }
-        msg_Dbg( p_access, "Received AMT relay membership query from %s", relay_ip );
+        msg_Dbg( p_access, "Received AMT relay membership query from %s", psz_relay_ip );
 
         amt_send_mem_update( p_access, sys->relayDisco, false );
-        bool eof=false;
+        bool b_eof=false;
         block_t *pkt;
 
         /* Confirm that you can pull a UDP packet from the socket */
-        if ( !(pkt = BlockAMT( p_access, &eof )) )
+        if ( !(pkt = BlockAMT( p_access, &b_eof )) )
         {
-            msg_Err( p_access, "Unable to receive UDP packet from AMT relay %s for multicast group", relay_ip );
+            msg_Err( p_access, "Unable to receive UDP packet from AMT relay %s for multicast group", psz_relay_ip );
             continue;
         }
         else
         {
             block_Release( pkt );
-            msg_Dbg( p_access, "Got UDP packet from multicast group via AMT relay %s, continuing...", relay_ip );
+            msg_Dbg( p_access, "Got UDP packet from multicast group via AMT relay %s, continuing...", psz_relay_ip );
 
             /* Arm IGMP timer once we've confirmed we are getting packets */
             vlc_timer_schedule( sys->updateTimer, false,
@@ -953,7 +990,7 @@ static bool open_amt_tunnel( stream_t *p_access )
     }
 
     /* if server is NULL then no AMT relay is responding */
-    if (server == NULL)
+    if ( server == NULL )
     {
         msg_Err( p_access, "No AMT servers responding" );
         goto error;
@@ -966,7 +1003,9 @@ static bool open_amt_tunnel( stream_t *p_access )
 error:
     vlc_timer_disarm( sys->updateTimer );
     if( serverinfo )
+    {
         freeaddrinfo( serverinfo );
+    }
     return false;
 }
 
@@ -975,8 +1014,8 @@ error:
  * */
 static unsigned short ipv6_checksum(unsigned short *buffer, int nLen)
 {
-    int nleft = nLen;
-    int sum = 0;
+    int i_nleft = nLen;
+    int i_sum = 0;
     unsigned short *w = buffer;
     unsigned short answer = 0;
 
@@ -987,34 +1026,35 @@ static unsigned short ipv6_checksum(unsigned short *buffer, int nLen)
     pseudo_header[17] = 0x02;
     pseudo_header[31] = 0x16;
 
-    // uint32_t tmp = htonl(nLen + 8); // MLD report + hop by hop header
-    uint32_t tmp = htonl(nLen); // MLD report length
+    uint32_t tmp = htonl(nLen); /* MLD report length */
     memcpy(&pseudo_header[32],&tmp,4);
-    pseudo_header[39] = 58; // next header = ICMPv6
+    pseudo_header[39] = 58; /* next header = ICMPv6 */
 
     unsigned short *buf1 = (unsigned short*) pseudo_header;
 
-    for(int i = 0; i < 20; i++){
-        sum += *buf1++;
+    for( int i = 0; i < 20; i++ )
+    {
+        i_sum += *buf1++;
     }
 
-    while (nleft > 1)
+    while ( i_nleft > 1)
     {
-        sum += *w++;
-        nleft -= 2;
+        i_sum += *w++;
+        i_nleft -= 2;
     }
-    if (nleft == 1)
+    if ( i_nleft == 1)
     {
         *(unsigned char*)(&answer) = *(unsigned char*)w;
-        sum += answer;
+        i_sum += answer;
     }
 
-    while (sum>>16) {
-        sum = (sum & 0xffff) + (sum >> 16);
+    while ( i_sum>>16 )
+    {
+        i_sum = (i_sum & 0xffff) + (i_sum >> 16);
     }
     
-    answer = ~sum;
-    return (answer);
+    answer = ~i_sum;
+    return answer;
 }
 
 /**
@@ -1022,28 +1062,29 @@ static unsigned short ipv6_checksum(unsigned short *buffer, int nLen)
  * */
 static unsigned short get_checksum( unsigned short *buffer, int nLen )
 {
-    int nleft = nLen;
-    int sum = 0;
+    int i_nleft = nLen;
+    int i_sum = 0;
     unsigned short *w = buffer;
     unsigned short answer = 0;
 
-    while (nleft > 1)
+    while ( i_nleft > 1 )
     {
-        sum += *w++;
-        nleft -= 2;
+        i_sum += *w++;
+        i_nleft -= 2;
     }
-    if (nleft == 1)
+    if ( i_nleft == 1 )
     {
         *(unsigned char*)(&answer) = *(unsigned char*)w;
-        sum += answer;
+        i_sum += answer;
     }
 
-    while (sum>>16) {
-        sum = (sum & 0xffff) + (sum >> 16);
+    while ( i_sum>>16 )
+    {
+        i_sum = (i_sum & 0xffff) + (i_sum >> 16);
     }
     
-    answer = ~sum;
-    return (answer);
+    answer = ~i_sum;
+    return answer;
 }
 
 /**
@@ -1060,11 +1101,12 @@ static int make_mld_report( stream_t *p_access, bool leave, amt_mldv2_listener_r
     report->records[0].aux_data_len = 0;
     report->records[0].num_srcs = 1;
     report->records[0].mcast_address = *group;
-    report->records[0].sources = vlc_obj_calloc( p_access, 1, 16); // ipv6 addr
-    if (!report->records[0].sources){
+    report->records[0].sources = vlc_obj_calloc( p_access, 1, 16); /* ipv6 addr */
+    if ( !report->records[0].sources )
+    {
         return 1;
     }
-    report->records[0].sources[0] = *src; // ipv6 addr
+    report->records[0].sources[0] = *src; /* ipv6 addr */
     return 0;
 }
 
@@ -1095,7 +1137,6 @@ static void make_ip_header( amt_ip_alert_t *p_ipHead )
     p_ipHead->protocol = 0x02;
     p_ipHead->check = 0;
     p_ipHead->srcAddr = INADDR_ANY;
-    // p_ipHead->options = 0x9404000;
     p_ipHead->options = 0x0;
 }
 
@@ -1108,18 +1149,18 @@ static void make_ipv6( amt_ipv6_t *p, uint16_t length, struct in6_addr *dst )
     p->traffic_class = 0;
     p->flow_label = 0;
     p->payload_len = length;
-    p->next_header = 0; // hop by hop option
+    p->next_header = 0; /* hop by hop option */
     p->hop_limit = 1;
     p->srcAddr = (struct in6_addr) IN6ADDR_ANY_INIT;
     p->dstAddr = *dst;
 
     ipv6_hop_by_hop_option_t hbh;
-    hbh.next_header = 58; // ICMPv6
+    hbh.next_header = 58; /* ICMPv6 */
     hbh.length = 0;
     hbh.router_alert.type = 5;
     hbh.router_alert.length = 2;
     hbh.router_alert.router_alert = 0;
-    hbh.padding_option.type = 1; // skip and continue, with low order bits set
+    hbh.padding_option.type = 1; /* skip and continue, with low order bits set */
     hbh.padding_option.length = 0;
 
     p->hop_by_hop_option = hbh;
@@ -1148,7 +1189,7 @@ static int amt_sockets_init( stream_t *p_access )
     }
 
     res = setsockopt(sys->sAMT, SOL_SOCKET, SO_REUSEADDR, &enable, sizeof(enable));
-    if(res < 0)
+    if( res < 0 )
     {
         msg_Err( p_access, "Couldn't make socket reusable");
         goto error;
@@ -1252,7 +1293,9 @@ static void amt_send_relay_discovery_msg( stream_t *p_access, char *relay_ip )
     nRet = sendto( sys->sAMT, chaSendBuffer, sizeof(chaSendBuffer), 0, (struct sockaddr*) &sys->relayDiscoAddr, sys->relay_is_ipv4 ? sizeof(struct sockaddr_in) : sizeof(struct sockaddr_in6));
 
     if( nRet < 0)
+    {
         msg_Err( p_access, "Sendto failed to %s with error: %s.", relay_ip, vlc_strerror_c(errno));
+    }
 }
 
 /**
@@ -1303,7 +1346,9 @@ static void amt_send_relay_request( stream_t *p_access, char *relay_ip )
     nRet = send( sys->sAMT, chaSendBuffer, sizeof(chaSendBuffer), 0 );
 
     if( nRet < 0 )
+    {
         msg_Err(p_access, "Error sending relay request to %s error: %s", relay_ip, vlc_strerror(errno) );
+    }
 }
 
 
@@ -1315,14 +1360,15 @@ static void amt_send_relay_request( stream_t *p_access, char *relay_ip )
  */
 
 static int serialize_ipv6_pkt(amt_ipv6_t *ip, uint8_t *buf, int buflen){
-    if (buflen < IPv6_HOP_BY_HOP_OPTION_LEN + IPv6_FIXED_HDR_LEN) {
+    if ( buflen < IPv6_HOP_BY_HOP_OPTION_LEN + IPv6_FIXED_HDR_LEN )
+    {
         return 0;
     }
 
     int i = 0;
 
-    buf[i++] = (ip->version << 4) | (ip->traffic_class >> 4); // first 4 bytes of tc
-    buf[i++] = (ip->traffic_class & 0xF) | ((ip->flow_label >> 16) & 0xF); // botoom four bits of tc + "upper" 4 of flow_label (flow label is only 20 bits)
+    buf[i++] = (ip->version << 4) | (ip->traffic_class >> 4); /* first 4 bytes of tc */
+    buf[i++] = (ip->traffic_class & 0xF) | ((ip->flow_label >> 16) & 0xF); /* bottom four bits of tc + "upper" 4 of flow_label (flow label is only 20 bits) */
     buf[i++] = ((ip->flow_label >> 8) & 0xFF);
     buf[i++] = (ip->flow_label & 0xFF);
 
@@ -1355,8 +1401,9 @@ static int serialize_ipv6_pkt(amt_ipv6_t *ip, uint8_t *buf, int buflen){
  * Returns: the number of bytes written on success, else 0
  */
 
-static int serialize_mld_report(amt_mldv2_listener_report_t *report, uint8_t *buf, int buflen, stream_t *p_access/*, struct in6_addr *src, struct in6_addr *dst, uint32_t icmp_len*/){
-    if (buflen < MLD_REPORT_LEN){
+static int serialize_mld_report(amt_mldv2_listener_report_t *report, uint8_t *buf, int buflen, stream_t *p_access){
+    if ( buflen < MLD_REPORT_LEN )
+    {
         return 0;
     }
 
@@ -1364,13 +1411,13 @@ static int serialize_mld_report(amt_mldv2_listener_report_t *report, uint8_t *bu
     int i = 0;
     buf[i++] = report->type;
     buf[i++] = report->code;
-    buf[i++] = 0;// checksum
-    buf[i++] = 0;// skip checksum for now
-    buf[i++] = 0;// reserved
-    buf[i++] = 0;// reserved
-    buf[i++] = report->num_records >> 8; // MSB first
+    buf[i++] = 0;/* checksum */
+    buf[i++] = 0;/* skip checksum for now */
+    buf[i++] = 0;/* reserved */
+    buf[i++] = 0;/* reserved */
+    buf[i++] = report->num_records >> 8; /* MSB first */
     buf[i++] = report->num_records & 0xFF;
-    // Address record
+    /* Address record */
     buf[i++] = report->records[0].record_type;
     buf[i++] = report->records[0].aux_data_len;
     buf[i++] = report->records[0].num_srcs >> 8;
@@ -1380,7 +1427,7 @@ static int serialize_mld_report(amt_mldv2_listener_report_t *report, uint8_t *bu
     memcpy(&buf[i],&report->records[0].sources[0],16);
     i += 16;
 
-    // get checksum over buffer and write it back into the right place
+    /* get checksum over buffer and write it back into the right place */
     tmp = htons(ipv6_checksum((unsigned short*)buf, buflen));
     msg_Dbg( p_access , "Ipv6 Checksum is 0x%x",tmp);
     buf[2] = tmp >> 8;
@@ -1397,11 +1444,11 @@ static int serialize_mld_report(amt_mldv2_listener_report_t *report, uint8_t *bu
 */
 static int amt_send_mem_update( stream_t *p_access, char *relay_ip, bool leave)
 {
-    int           amt_hdr_len = MAC_LEN + NONCE_LEN + AMT_HDR_LEN;
-    int           ipv6_hdr_len = IPv6_HOP_BY_HOP_OPTION_LEN + IPv6_FIXED_HDR_LEN;
-    int           sendBufSize = amt_hdr_len + IP_HDR_IGMP_LEN;
-    int           sendBufSizeIPv6 = amt_hdr_len + ipv6_hdr_len + MLD_REPORT_LEN;
-    uint8_t       pSendBuffer[ sendBufSize > sendBufSizeIPv6 ? sendBufSize : sendBufSizeIPv6 ]; // make the buffer as large as neededd
+    int           i_amt_hdr_len = MAC_LEN + NONCE_LEN + AMT_HDR_LEN;
+    int           i_ipv6_hdr_len = IPv6_HOP_BY_HOP_OPTION_LEN + IPv6_FIXED_HDR_LEN;
+    int           i_sendBufSize = i_amt_hdr_len + IP_HDR_IGMP_LEN;
+    int           i_sendBufSizeIPv6 = i_amt_hdr_len + i_ipv6_hdr_len + MLD_REPORT_LEN;
+    uint8_t       pSendBuffer[ i_sendBufSize > i_sendBufSizeIPv6 ? i_sendBufSize : i_sendBufSizeIPv6 ]; /* make the buffer as large as needed */
     uint32_t      ulNonce = 0;
     access_sys_t *sys = p_access->p_sys;
 
@@ -1416,15 +1463,16 @@ static int amt_send_mem_update( stream_t *p_access, char *relay_ip, bool leave)
     ulNonce = sys->glob_ulNonce;
     memcpy( &pSendBuffer[8], &ulNonce, NONCE_LEN );
 
-    if (sys->group_is_ipv4) {
+    if ( sys->group_is_ipv4 )
+    {
         /* make IP header for IGMP packet */
         amt_ip_alert_t p_ipHead;
         memset( &p_ipHead, 0, IP_HDR_IGMP_LEN );
         make_ip_header( &p_ipHead );
 
         struct sockaddr_in temp;
-        int res = inet_pton( AF_INET, MCAST_ALLHOSTS, &(temp.sin_addr) );
-        if( res != 1 )
+        int i_res = inet_pton( AF_INET, MCAST_ALLHOSTS, &(temp.sin_addr) );
+        if( i_res != 1 )
         {
             msg_Err(p_access, "Could not convert all hosts multicast address: %s", gai_strerror(errno) );
             return -1;
@@ -1442,7 +1490,9 @@ static int amt_send_mem_update( stream_t *p_access, char *relay_ip, bool leave)
             groupRcd.nSrc = htons(1);
             groupRcd.srcIP[0] = sys->mcastSrcAddr.ipv4.sin_addr.s_addr;
 
-        } else {
+        }
+        else
+        {
             groupRcd.type = leave ? AMT_IGMP_INCLUDE_CHANGE:AMT_IGMP_EXCLUDE_CHANGE;
             groupRcd.nSrc = htons(0);
         }
@@ -1460,10 +1510,10 @@ static int amt_send_mem_update( stream_t *p_access, char *relay_ip, bool leave)
         memcpy(&memUpdateMsg.encapsulated.igmp_memReport, &p_igmpMemRep, sizeof(p_igmpMemRep) );
 
         memcpy( &pSendBuffer[12], &memUpdateMsg, sizeof(memUpdateMsg.ipHead) + sizeof(memUpdateMsg.encapsulated.igmp_memReport) );
-        send( sys->sAMT, pSendBuffer, sendBufSize + IGMP_REPORT_LEN , 0 );
-    } else {
-
-        //TODO: handle the "leave" case
+        send( sys->sAMT, pSendBuffer, i_sendBufSize + IGMP_REPORT_LEN , 0 );
+    }
+    else
+    {
 
         amt_ipv6_t ip;
         memset( &ip, 0, sizeof(ip) );
@@ -1471,7 +1521,7 @@ static int amt_send_mem_update( stream_t *p_access, char *relay_ip, bool leave)
         memset( &report, 0, sizeof(report) );
 
         struct in6_addr tmp;
-        if(inet_pton( AF_INET6, MCAST_ALL_MLDv2_CAP_ROUTERS, &tmp ) != 1)
+        if( inet_pton( AF_INET6, MCAST_ALL_MLDv2_CAP_ROUTERS, &tmp ) != 1 )
         {
             msg_Err(p_access, "Could not convert all hosts multicast address: %s", gai_strerror(errno) );
             return -1;
@@ -1479,24 +1529,27 @@ static int amt_send_mem_update( stream_t *p_access, char *relay_ip, bool leave)
 
         make_ipv6(&ip, IPv6_HOP_BY_HOP_OPTION_LEN + MLD_REPORT_LEN, &tmp);
 
-        if(make_mld_report(p_access,leave,&report,&sys->mcastGroupAddr.ipv6.sin6_addr,&sys->mcastSrcAddr.ipv6.sin6_addr)){
+        if( make_mld_report(p_access,leave,&report,&sys->mcastGroupAddr.ipv6.sin6_addr,&sys->mcastSrcAddr.ipv6.sin6_addr) )
+        {
             goto oom;
         }
 
-        int i = serialize_ipv6_pkt(&ip,&pSendBuffer[amt_hdr_len],sendBufSizeIPv6 - MLD_REPORT_LEN - amt_hdr_len);
-        if (!i){
+        int i = serialize_ipv6_pkt(&ip,&pSendBuffer[i_amt_hdr_len],i_sendBufSizeIPv6 - MLD_REPORT_LEN - i_amt_hdr_len);
+        if ( !i )
+        {
             msg_Err( p_access, "Couldnt serialize ipv6 packet");
             goto fail;
         }
         
-        if (!serialize_mld_report(&report,&pSendBuffer[amt_hdr_len + i],MLD_REPORT_LEN,p_access)){
+        if ( !serialize_mld_report(&report,&pSendBuffer[i_amt_hdr_len + i],MLD_REPORT_LEN,p_access) )
+        {
             msg_Err( p_access, "Couldnt serialize mld report");
             goto fail;
         }
         
-        send( sys->sAMT, pSendBuffer, sendBufSizeIPv6, 0 );
+        send( sys->sAMT, pSendBuffer, i_sendBufSizeIPv6, 0 );
 
-        vlc_obj_free( p_access, report.records[0].sources); // allocd in the make_mld_report() function
+        vlc_obj_free( p_access, report.records[0].sources); /* allocd in the make_mld_report() function */
     }
 
 
@@ -1546,7 +1599,7 @@ static bool amt_rcv_relay_adv( stream_t *p_access )
 
     ssize_t len = recvfrom( sys->sAMT, pkt, RELAY_ADV_MSG_LEN, 0, 0, 0 );
 
-    if (len < 0)
+    if ( len < 0 )
     {
         msg_Err(p_access, "Received message length less than zero");
         return false;
@@ -1578,7 +1631,7 @@ static bool amt_rcv_relay_adv( stream_t *p_access )
     relayAddr6.sin6_port = htons( AMT_PORT );
     relayAddr6.sin6_family = AF_INET6;
 
-    memcpy( sys->relay_is_ipv4 ? (void*) &relayAddr4.sin_addr : (void*) &relayAddr6.sin6_addr , &pkt[8], sys->relay_is_ipv4 ? 4 : 16); // maybe this should be dynamic, determining the address family based on the length of the response?
+    memcpy( sys->relay_is_ipv4 ? (void*) &relayAddr4.sin_addr : (void*) &relayAddr6.sin6_addr , &pkt[8], sys->relay_is_ipv4 ? 4 : 16); /* maybe this should be dynamic, determining the address family based on the length of the response? */
 
     int nRet = connect( sys->sAMT, sys->relay_is_ipv4 ? (struct sockaddr*)&relayAddr4 : (struct sockaddr*)&relayAddr6, sys->relay_is_ipv4 ? sizeof(relayAddr4) : sizeof(relayAddr6) );
     if( nRet < 0 )
@@ -1618,9 +1671,9 @@ static bool amt_rcv_relay_adv( stream_t *p_access )
  */
 static bool amt_rcv_relay_mem_query( stream_t *p_access )
 {
-    int buf_len = RELAY_QUERY_MSG_LEN + AMT_IPV6_MAX_NUM_SOURCES*16;
-    char pkt[buf_len];
-    memset( pkt, 0, buf_len);
+    int i_buf_len = RELAY_QUERY_MSG_LEN + AMT_IPV6_MAX_NUM_SOURCES*16;
+    char pkt[i_buf_len];
+    memset( pkt, 0, i_buf_len);
     struct pollfd ufd[1];
     access_sys_t *sys = p_access->p_sys;
 
@@ -1636,9 +1689,9 @@ static bool amt_rcv_relay_mem_query( stream_t *p_access )
             return false;
     }
 
-    ssize_t len = recv( sys->sAMT, pkt, buf_len, 0 );
+    ssize_t len = recv( sys->sAMT, pkt, i_buf_len, 0 );
 
-    if (len <= 0 || (sys->group_is_ipv4 && len != RELAY_QUERY_MSG_LEN - 40) || (!sys->group_is_ipv4 && len < RELAY_QUERY_MSG_LEN)) // subtract 40 for ipv4 case
+    if ( len <= 0 || (sys->group_is_ipv4 && len != RELAY_QUERY_MSG_LEN - 40) || (!sys->group_is_ipv4 && len < RELAY_QUERY_MSG_LEN) ) /* subtract 40 for ipv4 case */
     {
         msg_Err(p_access, "length of relay query message invalid!");
         return false;
@@ -1654,7 +1707,8 @@ static bool amt_rcv_relay_mem_query( stream_t *p_access )
         return false;
     }
 
-    if (sys->group_is_ipv4) {
+    if ( sys->group_is_ipv4 )
+    {
         size_t shift = AMT_HDR_LEN + MAC_LEN + NONCE_LEN + IP_HDR_IGMP_LEN;
         sys->relay_query.igmp.type = pkt[shift];
         shift++; assert( shift < RELAY_QUERY_MSG_LEN);
@@ -1667,13 +1721,19 @@ static bool amt_rcv_relay_mem_query( stream_t *p_access )
         sys->relay_query.igmp.s_qrv = pkt[shift];
         shift++; assert( shift < RELAY_QUERY_MSG_LEN);
         if( pkt[shift] == 0 )
+        {
             sys->relay_query.igmp.qqic = 125;
+        }
         else
+        {
             sys->relay_query.igmp.qqic = pkt[shift];
+        }
 
         shift++; assert( shift < RELAY_QUERY_MSG_LEN);
         memcpy( &sys->relay_query.igmp.nSrc, &pkt[shift], 2 );
-    } else {
+    }
+    else
+    {
         __uint16_t temp_s;
         int offset = AMT_HDR_LEN + MAC_LEN + NONCE_LEN + IPv6_FIXED_HDR_LEN + IPv6_HOP_BY_HOP_OPTION_LEN;
         sys->relay_query.mld.type = pkt[offset++];
@@ -1683,29 +1743,33 @@ static bool amt_rcv_relay_mem_query( stream_t *p_access )
         offset += 2;
         memcpy( &temp_s, &pkt[offset], 2 );
         sys->relay_query.mld.max_resp_code = ntohs(temp_s);
-        offset += 4; // += 2 for max resp code, += 2 more for reserved
-        memcpy( &sys->relay_query.mld.mcast_address, &pkt[offset], 16); // ipv6 addr
+        offset += 4; /* += 2 for max resp code, += 2 more for reserved */
+        memcpy( &sys->relay_query.mld.mcast_address, &pkt[offset], 16); /* ipv6 addr */ 
         offset += 16;
-        sys->relay_query.mld.qrv = pkt[offset] & (7); // bottom 3 bits
-        sys->relay_query.mld.s_flag = pkt[offset] & (1 << 3); // 4th bit
+        sys->relay_query.mld.qrv = pkt[offset] & (7); /* bottom 3 bits */
+        sys->relay_query.mld.s_flag = pkt[offset] & (1 << 3); /* 4th bit */
         offset++;
         sys->relay_query.mld.qqic = pkt[offset++];
-        if (!sys->relay_query.mld.qqic) {
+        if ( !sys->relay_query.mld.qqic )
+        {
             sys->relay_query.mld.qqic = 125;
         }
         memcpy( &temp_s, &pkt[offset], 2 );
         sys->relay_query.mld.num_srcs = ntohs(temp_s);
         offset += 2;
-        if (sys->relay_query.mld.num_srcs > AMT_IPV6_MAX_NUM_SOURCES) {
+        if ( sys->relay_query.mld.num_srcs > AMT_IPV6_MAX_NUM_SOURCES )
+        {
             msg_Err(p_access, "Too many source addresses in mld query - currently we only handle %d sources!",AMT_IPV6_MAX_NUM_SOURCES);
             return false;
         }
         sys->relay_query.mld.srcs = vlc_obj_calloc(sys->vlc_obj, sys->relay_query.mld.num_srcs, 16);
-        if( unlikely( sys->relay_query.mld.srcs == NULL ) ) {
+        if( unlikely( sys->relay_query.mld.srcs == NULL ) )
+        {
             msg_Err(p_access, "AMT: Out of memory");
             return VLC_ENOMEM;
         }
-        for (int i = 0; i < sys->relay_query.mld.num_srcs; i++) {
+        for ( int i = 0; i < sys->relay_query.mld.num_srcs; i++ )
+        {
             struct in6_addr tmp;
             memcpy(&tmp,&pkt[offset],16);
             sys->relay_query.mld.srcs[i] = tmp;
