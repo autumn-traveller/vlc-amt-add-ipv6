@@ -751,7 +751,7 @@ static block_t *BlockAMT(stream_t *p_access, bool *restrict eof)
         /* Check for the integrity of the received AMT packet */
         if( len < i_tunnel || *(pkt->p_buffer) != AMT_MULT_DATA )
         {
-            msg_Err(p_access, "Error pulling data from AMT socket. Length of data : %ld may be too short (should be minimum %d) - AMT header is %s",len, i_tunnel, (len > 0 && pkt->p_buffer[0] == AMT_MULT_DATA) ? "correct" : "incorrect" );
+            msg_Err(p_access, "Error pulling data from AMT socket. Length of data : %zd may be too short (should be minimum %d) - AMT header is %s",len, i_tunnel, (len > 0 && pkt->p_buffer[0] == AMT_MULT_DATA) ? "correct" : "incorrect" );
             goto error;
         }
 
@@ -784,7 +784,7 @@ static block_t *BlockAMT(stream_t *p_access, bool *restrict eof)
 
             if ( b_is_fragmented && len < i_tunnel + 8 )
             {
-                msg_Err(p_access, "Received length of data %ld is smaller than minimum length for an ip header + fragmentation header (%d)",len, i_tunnel + 8);
+                msg_Err(p_access, "Received length of data %zd is smaller than minimum length for an ip header + fragmentation header (%d)",len, i_tunnel + 8);
                 goto error;
             }
 
@@ -804,7 +804,7 @@ static block_t *BlockAMT(stream_t *p_access, bool *restrict eof)
                     goto error; /* here we actually need to be sure the next header is UDP othewrise we cant know the payload length */
                 }
 
-                msg_Dbg(p_access, "Start of new fragment, id is 0x%x (NETWORK BYTE ORDER) , first fragment's length is %u (%ld total - %d tunnel size) (mtu is %ld)",fragment_id, payload_len,len,i_tunnel,sys->mtu);
+                msg_Dbg(p_access, "Start of new fragment, id is 0x%x (NETWORK BYTE ORDER) , first fragment's length is %u (%zd total - %d tunnel size) (mtu is %zd)",fragment_id, payload_len,len,i_tunnel,sys->mtu);
             }
             else if ( b_is_fragmented && fragment_id != tmp )
             {
@@ -842,7 +842,7 @@ static block_t *BlockAMT(stream_t *p_access, bool *restrict eof)
 
         if ( !payload_len || (shift < i_tunnel && !b_is_fragmented) )
         {
-            msg_Err(p_access, "Length listed in the ip header is unrealistic: %ld bytes received but %u were listed in ip header. Tunnel overhead should be %d bytes",len,payload_len,i_tunnel);
+            msg_Err(p_access, "Length listed in the ip header is unrealistic: %zd bytes received but %u were listed in ip header. Tunnel overhead should be %d bytes",len,payload_len,i_tunnel);
             goto error;
         }
 
@@ -864,7 +864,7 @@ static block_t *BlockAMT(stream_t *p_access, bool *restrict eof)
         len = recvfrom( sys->sAMT, (char *)pkt->p_buffer, sys->mtu + i_tunnel, 0, (struct sockaddr*)&temp, &temp_size );
         if ( len <= 0 )
         {
-            msg_Err(p_access, "recv() call failed: %ld was returned", len);
+            msg_Err(p_access, "recv() call failed: %zd was returned", len);
             goto error;
         }
     }
@@ -873,7 +873,7 @@ static block_t *BlockAMT(stream_t *p_access, bool *restrict eof)
     pkt->p_buffer += shift;
     pkt->i_buffer = len;
 
-    msg_Dbg(p_access, "Received mcast/amt packet of length %ld",len);
+    msg_Dbg(p_access, "Received mcast/amt packet of length %zd",len);
     return pkt;
 
 error:
@@ -1734,15 +1734,15 @@ static bool amt_rcv_relay_mem_query( stream_t *p_access )
     }
     else
     {
-        __uint16_t temp_s;
+        uint16_t temp_short;
         int offset = AMT_HDR_LEN + MAC_LEN + NONCE_LEN + IPv6_FIXED_HDR_LEN + IPv6_HOP_BY_HOP_OPTION_LEN;
         sys->relay_query.mld.type = pkt[offset++];
         sys->relay_query.mld.code = pkt[offset++];
-        memcpy( &temp_s, &pkt[offset], 2 );
-        sys->relay_query.mld.checksum = ntohs(temp_s);
+        memcpy( &temp_short, &pkt[offset], 2 );
+        sys->relay_query.mld.checksum = ntohs(temp_short);
         offset += 2;
-        memcpy( &temp_s, &pkt[offset], 2 );
-        sys->relay_query.mld.max_resp_code = ntohs(temp_s);
+        memcpy( &temp_short, &pkt[offset], 2 );
+        sys->relay_query.mld.max_resp_code = ntohs(temp_short);
         offset += 4; /* += 2 for max resp code, += 2 more for reserved */
         memcpy( &sys->relay_query.mld.mcast_address, &pkt[offset], 16); /* ipv6 addr */ 
         offset += 16;
@@ -1754,8 +1754,8 @@ static bool amt_rcv_relay_mem_query( stream_t *p_access )
         {
             sys->relay_query.mld.qqic = 125;
         }
-        memcpy( &temp_s, &pkt[offset], 2 );
-        sys->relay_query.mld.num_srcs = ntohs(temp_s);
+        memcpy( &temp_short, &pkt[offset], 2 );
+        sys->relay_query.mld.num_srcs = ntohs(temp_short);
         offset += 2;
         if ( sys->relay_query.mld.num_srcs > AMT_IPV6_MAX_NUM_SOURCES )
         {
