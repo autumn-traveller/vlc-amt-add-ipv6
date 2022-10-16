@@ -54,4 +54,3 @@ build*/
 contrib-*
 install-*
 !extras/package/apple/build.sh
-.vscode

@@ -130,7 +130,6 @@
 #define AMT_MLD_QUERY_TYPE 130
 #define AMT_MLD_DONE_TYPE 132
 
-#define MCAST_ANYCAST(is_ipv4) ((is_ipv4) ? "0.0.0.0" : "::")
 #define MCAST_ALLHOSTS "224.0.0.22"
 #define MCAST_ALL_MLDv2_CAP_ROUTERS "FF02::16"
 #define LINK_SCOPE_ALL_NODES_MCAST "FF02::1"
@@ -523,7 +522,7 @@ static int Open( vlc_object_t *p_this )
     /* If strings are equal then no multicast source has been specified, so try anycast */
     if( strcmp( url.psz_host, mcastSrc ) == 0 )
     {
-        mcastSrc = MCAST_ANYCAST(sys->group_is_ipv4);
+        mcastSrc = sys->group_is_ipv4 ? "0.0.0.0" : "::/0";
         memset(&sys->mcastSrcAddr,0,sizeof(sys->mcastSrcAddr));
         msg_Dbg( p_access, "No multicast source address specified, trying ASM...");
     }
